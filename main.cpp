@@ -2,7 +2,30 @@
 #include <memory>
 #include <vector>
 #include <math.h>
+#include <cstdlib>
+#include <ctime>
 #include "raylib.h"
+
+float randX () 
+{
+    float randX;
+    int random_number = std::rand() % 2; 
+
+    if (random_number == 1) randX = -(std::rand() % 99 + 1);
+    else randX = std::rand() % 99 + 1201;;
+
+    return randX;
+}
+float randY () 
+{
+    float randY;
+    int random_number = std::rand() % 2; 
+
+    if (random_number == 1) randY = -(std::rand() % 199 + 1);
+    else randY = std::rand() % 199 + 801;
+
+    return randY;
+}
 
 class Object 
 {
@@ -33,16 +56,22 @@ class Entity : public Object
     void virtual Draw() = 0;
 
     int  getHealth() { return health; }
-    void setHealth(int newHealth) { health = newHealth; };
+
+    void setHealth(int newHealth) 
+    { 
+        if (newHealth > 0) health = newHealth;
+        else health = 1; 
+    };
 
 };
-
 
 class Bullet : public Object 
 {
   private:
 
+    float width, height;
     float angle;
+    int damage;
     bool isActive = false;
 
   public: 
@@ -50,11 +79,17 @@ class Bullet : public Object
     Bullet () 
     {
         setSpeed(8);
+        setWidth(8);
+        setHeight(10);
+        setDamage(1);
     }
 
-    Bullet (int _speed) 
+    Bullet (int _speed, float _width, float _height, int _damage) 
     {
         setSpeed(_speed);
+        setWidth(_width);
+        setHeight(_height);
+        setDamage(_damage);
     }
 
     void Update () override {}
@@ -77,17 +112,30 @@ class Bullet : public Object
             setX(newX);
             setY(newY);
         }
+
     }
 
     void Draw () 
     {
-        DrawRectangle(getX(), getY(), 8, 10, BLACK);
+        DrawRectangle(getX(), getY(), getWidth(), getHeight(), BLACK);
     }
 
     float getAngle () { return angle; }
-    
     bool getIsActive () { return isActive; }
+    float getWidth () { return width; }
+    float getHeight () { return height; }
+    int getDamage () { return damage; }
 
+    Rectangle getRect()  
+    {
+        return Rectangle{ getX(), getY(), getWidth(), getHeight() };
+    }
+
+    void setDamage (int _damage) 
+    {
+        if (_damage > 0) damage = _damage;
+        else damage = 1;
+    }
     void setAngle (float _angle) 
     {
         angle = _angle;
@@ -96,6 +144,17 @@ class Bullet : public Object
     void setActive (bool _isActive) 
     {
         isActive = _isActive;
+    }
+
+    void setWidth (float _width) 
+    {
+        if (_width > 0.0f) width = _width;
+        else width = 1.0f;
+    }
+    void setHeight (float _height) 
+    {
+        if (_height > 0.0f) height = _height;
+        else height = 1.0f;
     }
 
 };
@@ -216,6 +275,7 @@ class Player : public Entity
         {
             shootCooldown = _shootCooldown;
         }
+        else shootCooldown = 0.0f;
     }
 
 };
@@ -223,40 +283,84 @@ class Player : public Entity
 class Enemy : public Entity 
 {
   private:
+
     Vector2 position;
     float angelDeg;
+    float width, height;
+    bool isAlive = false;
 
   public:
     
-    Enemy(int startX, int startY) 
+    Enemy() 
     {
         setHealth(1);
-
-        setX(startX);
-        setY(startY);
-
+        setX(randX());
+        setY(randY());
+        setWidth(15);
+        setHeight(15);
         setSpeed(3);
+    }
+
+    Enemy (float _x, float _y) : Enemy(1, _x, _y, 15, 15, 3) {}
+    
+    Enemy (int _health, float _x, float _y, float _width, float _height, int _speed) 
+    {
+        setHealth(_health);
+        setX(_x);
+        setY(_y);
+        setWidth(_width);
+        setHeight(_height);
+        setSpeed(_speed);
     }
 
     void Update () override {}
 
     void Update(float playerPosX, float playerPosY)  
     {
-        position.x = playerPosX;
-        position.y = playerPosY;
-        angelDeg = atan2f(position.y - getY(), position.x - getX()) * RAD2DEG;
+        if (getHealth() <= 0) isAlive = false;
 
-        float newX, newY;
-        newX = (getSpeed() * cos(angelDeg * DEG2RAD)) + getX();
-        newY = (getSpeed() * sin(angelDeg * DEG2RAD)) + getY();
+        if (isAlive) 
+        {
+            position.x = playerPosX;
+            position.y = playerPosY;
+            angelDeg = atan2f(position.y - getY(), position.x - getX()) * RAD2DEG;
 
-        setX(newX);
-        setY(newY);
+            float newX, newY;
+            newX = (getSpeed() * cos(angelDeg * DEG2RAD)) + getX();
+            newY = (getSpeed() * sin(angelDeg * DEG2RAD)) + getY();
+
+            setX(newX);
+            setY(newY);
+        }
     }
 
     void Draw() override
     {
-        DrawRectangle(getX(), getY(), 15,15, RED);
+        if (isAlive) 
+        {
+            DrawRectangle(getX(), getY(), getWidth(), getHeight(), RED);
+        }
+    }
+
+    float getWidth () { return width; }
+    float getHeight () { return height; }
+    bool getIsAlive () { return isAlive; }
+
+    Rectangle getRect()  
+    {
+        return Rectangle{ getX(), getY(), getWidth(), getHeight() };
+    }
+
+    void setAlive (bool _isAlive) { isAlive = _isAlive; }
+    void setWidth (float _width) 
+    {
+        if (_width > 0.0f) width = _width;
+        else width = 1.0f;
+    }
+    void setHeight (float _height) 
+    {
+        if (_height > 0.0f) height = _height;
+        else height = 1.0f;
     }
 
 };
@@ -297,45 +401,153 @@ class Cursor
 
 };
 
+class CollisionManager 
+{
+  public:
 
+    void CheckCollisisonTwoEnemy (Enemy &enem1, Enemy &enem2) 
+    {
+        Rectangle overlap = GetCollisionRec(enem1.getRect(), enem2.getRect());
+        float newXEnem1, newYEnem1;
+        newXEnem1 = enem1.getX();
+        newYEnem1 = enem1.getY();
+
+        float newXEnem2, newYEnem2;
+        newXEnem2 = enem2.getX();
+        newYEnem2 = enem2.getY();
+
+        if (overlap.width > 0 && overlap.height > 0) 
+        {
+            if (overlap.width < overlap.height) 
+            {
+                if (enem1.getRect().x < enem2.getRect().x) 
+                {
+                    newXEnem1 -= overlap.width * 0.5f;
+                    newXEnem2 += overlap.width * 0.5f;
+                }
+                else 
+                {
+                    newXEnem1 += overlap.width * 0.5f;
+                    newXEnem2 -= overlap.width * 0.5f;
+                }
+                
+                enem1.setX(newXEnem1);
+                enem2.setX(newXEnem2);
+            }
+            else 
+            {
+                if (enem1.getRect().y < enem2.getRect().y) 
+                {
+                    newYEnem1 -= overlap.height * 0.5f;
+                    newYEnem2 += overlap.height * 0.5f;
+                }
+                else 
+                {
+                    newYEnem1 += overlap.height * 0.5f;
+                    newYEnem2 -= overlap.height * 0.5f;
+                }
+
+                enem1.setY(newYEnem1);
+                enem2.setY(newYEnem2);
+            }
+        }
+    }
+    void CheckCollissionAllEnemy (std::vector<Enemy> &enemies) 
+    {
+        for (int i = 0; i < enemies.size(); i++) 
+        {
+            for (int j = i + 1; j < enemies.size(); j++) 
+            {
+                CheckCollisisonTwoEnemy(enemies[i], enemies[j]);
+            }
+        }
+    }
+
+    void CheckcollisionBulletAndEnemy (Bullet &bul, Enemy &enem) 
+    {
+        if (CheckCollisionRecs(bul.getRect(), enem.getRect())) 
+        {
+            bul.setActive(false);
+            int newHealth = enem.getHealth() - bul.getDamage();
+            enem.setHealth(newHealth);
+        }
+    }
+    void CheckCollisionAllBullet (std::vector<Bullet> &bullets, std::vector<Enemy> &enemies) 
+    {
+        for (int i = 0; i < bullets.size(); i++) 
+        {
+            if (!bullets[i].getIsActive()) continue;
+
+            for (int j = 0; j < enemies.size() ; j++) 
+            {
+                if (enemies[j].getIsAlive()) 
+                {
+                    CheckcollisionBulletAndEnemy(bullets[i], enemies[j]);
+
+                    if (!bullets[i].getIsActive()) break;
+                }
+            }
+        }
+    }
+};
 
 int main () 
 {
-    int widthWi = 1200;  //x
-    int heigthWi = 800;  //y
+    std::srand(std::time(nullptr));
+
+    int widthWi = 1200;  // x
+    int heigthWi = 800;  // y
 
     InitWindow(widthWi, heigthWi, "RunAway");
     SetTargetFPS(60);
 
     //Initialization
+ 
+    std::vector<Enemy> enemies;
+    enemies.resize(100);
+
+    for (int i = 0; i < 100; i++) 
+    {
+        Enemy enem;
+        enem.setAlive(true);
+        enemies.push_back(enem);
+    }
 
     std::unique_ptr<Player> player = std::make_unique<Player>();
-    std::unique_ptr<Enemy> enemy = std::make_unique<Enemy>(360, 200);
-    std::unique_ptr<Enemy> enemy1 = std::make_unique<Enemy>(300, 140);
-
     std::unique_ptr<Cursor> cursor = std::make_unique<Cursor>();
+    std::unique_ptr<CollisionManager> collission = std::make_unique<CollisionManager>();
 
     while(WindowShouldClose() == false) 
     {
         // Updating
         
         cursor->Update(player->getX(), player->getY());
-        player->Update(cursor->getAngleDeg());
-        enemy->Update(player->getX(), player->getY());
-        enemy1->Update(player->getX(), player->getY());
+        
+        for(int i = 0; i < enemies.size(); i++) 
+        {
+            enemies[i].Update(player->getX(), player->getY());
+        }
 
-        //Drawing
+        player->Update(cursor->getAngleDeg());
+
+        // Checking collision
+
+        collission->CheckCollissionAllEnemy(enemies);
+
+        // Drawing
 
         BeginDrawing();
 
         ClearBackground(LIGHTGRAY);
         DrawText(TextFormat("FPS: %i", GetFPS()), 10, 10, 24, BLACK);
         player->Draw();
-        enemy->Draw();
-        enemy1->Draw();
+
+        for(int i = 0; i < enemies.size(); i++) 
+        {
+            enemies[i].Draw();
+        }
         cursor->Draw();
         
-
         EndDrawing();
     }
 }
