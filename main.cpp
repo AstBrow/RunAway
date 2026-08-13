@@ -31,18 +31,18 @@ class Object
 {
  private:
     float x, y;
-    int speed;
+    float speed;
  
  public:
     void virtual Update() = 0;
 
     float  getX() { return x; }
     float  getY() { return y; }
-    int  getSpeed() { return speed; }
+    float  getSpeed() { return speed; }
 
     void setX(float newX) { x = newX; };
     void setY(float newY) { y = newY; };
-    void setSpeed(int newSpeed) { speed = newSpeed; };
+    void setSpeed(float newSpeed) { speed = newSpeed; };
 
 };
 
@@ -59,7 +59,7 @@ class Entity : public Object
 
     void setHealth(int newHealth) 
     { 
-        if (newHealth > 0) health = newHealth;
+        if (newHealth >= 0) health = newHealth;
         else health = 1; 
     };
 
@@ -72,7 +72,7 @@ class Bullet : public Object
     float width, height;
     float angle;
     int damage;
-    bool isActive = false;
+    bool isActive;
 
   public: 
 
@@ -82,14 +82,16 @@ class Bullet : public Object
         setWidth(8);
         setHeight(10);
         setDamage(1);
+        setActive(false);
     }
 
-    Bullet (int _speed, float _width, float _height, int _damage) 
+    Bullet (float _speed, float _width, float _height, int _damage) 
     {
         setSpeed(_speed);
         setWidth(_width);
         setHeight(_height);
         setDamage(_damage);
+        setActive(false);
     }
 
     void Update () override {}
@@ -167,26 +169,33 @@ class Player : public Entity
     float radius = 12;
     float shootCooldown; // Задержка между выстрелами (в секундах)
     float lastShootTime;
+    bool isAlive;
+
+    float invulnTimer = 0.0f;
+    float invuln_duration = 1.0f; //  сек неуязвимости
 
  public:
 
     Player () 
     {
-        setHealth(3);
+        setHealth(8);
         setX(GetScreenWidth()/2);
         setY(GetScreenHeight()/2);
         SetShootCooldown(0.3f);
+        SetIsAlive(true);
         bullets.resize(1000);
 
-        setSpeed(4);
+        setSpeed(5);
     }
 
-    Player (int _health, int _speed, float _shootCooldown, int sizeBullets) 
+    Player (int _health, float _speed, float _shootCooldown, int sizeBullets, float _invulm_duration) 
     {
         setHealth(_health);
         setX(GetScreenWidth()/2);
         setY(GetScreenHeight()/2);
         SetShootCooldown(_shootCooldown);
+        SetIsAlive(true);
+        SetInvulmDuration(_invulm_duration);
         bullets.resize(sizeBullets);
 
         setSpeed(_speed);
@@ -196,78 +205,95 @@ class Player : public Entity
 
     void Update(float angleDeg)  
     {
-        int speedTemp;
-        float xTemp, yTemp;
-
-        speedTemp = getSpeed();
-        xTemp = getX();
-        yTemp = getY();
-
-        if (IsKeyDown(KEY_W)) yTemp -= speedTemp;
-        
-        if (IsKeyDown(KEY_S)) yTemp += speedTemp;
-        
-        if (IsKeyDown(KEY_A)) xTemp -= speedTemp;
-
-        if (IsKeyDown(KEY_D)) xTemp += speedTemp;
-
-        if (yTemp < radius) yTemp = radius;
-        if (yTemp > GetScreenHeight() - radius) yTemp = GetScreenHeight() - radius;
-
-        if (xTemp < radius) xTemp = radius;
-        if (xTemp > GetScreenWidth() - radius) xTemp = GetScreenWidth() - radius;
-
-        setY(yTemp);
-        setX(xTemp);
-
-        float currentTime = GetTime();
-
-        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+        if (isAlive)
         {
-            if (currentTime - lastShootTime >= shootCooldown) 
+            if (invulnTimer > 0.0f) { invulnTimer -= GetFrameTime(); }
+
+            int speedTemp;
+            float xTemp, yTemp;
+
+            speedTemp = getSpeed();
+            xTemp = getX();
+            yTemp = getY();
+
+            if (IsKeyDown(KEY_W)) yTemp -= speedTemp;
+            
+            if (IsKeyDown(KEY_S)) yTemp += speedTemp;
+            
+            if (IsKeyDown(KEY_A)) xTemp -= speedTemp;
+
+            if (IsKeyDown(KEY_D)) xTemp += speedTemp;
+
+            if (yTemp < radius) yTemp = radius;
+            if (yTemp > GetScreenHeight() - radius) yTemp = GetScreenHeight() - radius;
+
+            if (xTemp < radius) xTemp = radius;
+            if (xTemp > GetScreenWidth() - radius) xTemp = GetScreenWidth() - radius;
+
+            setY(yTemp);
+            setX(xTemp);
+
+            float currentTime = GetTime();
+
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
             {
-                for (auto &bul : bullets) 
+                if (currentTime - lastShootTime >= shootCooldown) 
                 {
-                    if (!bul.getIsActive()) 
+                    for (auto &bul : bullets) 
                     {
-                        bul.setActive(true);
-                        bul.setAngle(angleDeg);
-                        bul.setX(getX());
-                        bul.setY(getY());
-                        
-                        break;
+                        if (!bul.getIsActive()) 
+                        {
+                            bul.setActive(true);
+                            bul.setAngle(angleDeg);
+                            bul.setX(getX());
+                            bul.setY(getY());
+                            
+                            break;
+                        }
                     }
+
+                    lastShootTime = currentTime;
                 }
 
-                lastShootTime = currentTime;
             }
 
-        }
-
-        for (auto &bul : bullets) 
-        {
-            if (bul.getIsActive())
+            for (auto &bul : bullets) 
             {
-                bul.Update(getX(), getY(), shootCooldown, angleDeg);
+                if (bul.getIsActive())
+                {
+                    bul.Update(getX(), getY(), shootCooldown, angleDeg);
+                }
             }
         }
     }
 
     void Draw () override
     {
-        DrawText(TextFormat("Health: %i", getHealth()), 10, 40, 24, BLACK);
-        DrawCircle(getX(), getY(), radius, BLUE);
+        if (GetInvulmTimer() > 0.0f && (int)(GetTime() * 10) % 2 == 0) { return; }
 
-        for (auto &bul : bullets) 
+        if (isAlive) 
         {
-            if (bul.getIsActive()) 
+            DrawCircle(getX(), getY(), radius, BLUE);
+
+            for (auto &bul : bullets) 
             {
-                bul.Draw();
+                if (bul.getIsActive()) 
+                {
+                    bul.Draw();
+                }
             }
         }
     }
 
+    void TriggerInvulnerability () { invulnTimer = invuln_duration; }
+
     float GetShootCooldown () { return shootCooldown; }
+    std::vector<Bullet>& GetBullets () { return bullets; }
+    Vector2 GetVector2 () { return Vector2{getX(), getY()}; }
+    float GetRadius () { return radius; }
+    bool GetisAlive () { return isAlive; }
+    float GetInvulmTimer () { return invulnTimer; }
+    float GetInvulmDuration () { return invuln_duration; };
 
     void SetShootCooldown (float _shootCooldown) 
     {
@@ -277,7 +303,22 @@ class Player : public Entity
         }
         else shootCooldown = 0.0f;
     }
-
+    void SetRadius (float _radius) 
+    {
+        if (_radius > 0) radius = _radius;
+        else radius = 1;
+    }
+    void SetIsAlive (bool _isAlive) { isAlive = _isAlive; }
+    void SetInvulmTimer (float _invulmTimer) 
+    {
+        if (_invulmTimer >= 0.0f) invulnTimer = _invulmTimer;
+        else invulnTimer = 0.0f;
+    }
+    void SetInvulmDuration (float _invulmDuration) 
+    {
+        if (_invulmDuration >= 0.0f) invuln_duration = _invulmDuration;
+        else invuln_duration = 0.5f;
+    }
 };
 
 class Enemy : public Entity 
@@ -286,8 +327,10 @@ class Enemy : public Entity
 
     Vector2 position;
     float angelDeg;
+    int damage;
     float width, height;
     bool isAlive = false;
+    Color color;
 
   public:
     
@@ -299,11 +342,14 @@ class Enemy : public Entity
         setWidth(15);
         setHeight(15);
         setSpeed(3);
+        setAlive(true);
+        setDamage(1);
+        setColor(RED);
     }
 
-    Enemy (float _x, float _y) : Enemy(1, _x, _y, 15, 15, 3) {}
+    Enemy (float _x, float _y) : Enemy(1, _x, _y, 15, 15, 3, 1) {}
     
-    Enemy (int _health, float _x, float _y, float _width, float _height, int _speed) 
+    Enemy (int _health, float _x, float _y, float _width, float _height, float _speed, int _damage) 
     {
         setHealth(_health);
         setX(_x);
@@ -311,14 +357,15 @@ class Enemy : public Entity
         setWidth(_width);
         setHeight(_height);
         setSpeed(_speed);
+        setDamage(_damage);
+        setAlive(true);
+        setColor(RED);
     }
 
     void Update () override {}
 
     void Update(float playerPosX, float playerPosY)  
     {
-        if (getHealth() <= 0) isAlive = false;
-
         if (isAlive) 
         {
             position.x = playerPosX;
@@ -338,13 +385,15 @@ class Enemy : public Entity
     {
         if (isAlive) 
         {
-            DrawRectangle(getX(), getY(), getWidth(), getHeight(), RED);
+            DrawRectangle(getX(), getY(), getWidth(), getHeight(), color);
         }
     }
 
     float getWidth () { return width; }
     float getHeight () { return height; }
     bool getIsAlive () { return isAlive; }
+    int getDamage () { return damage; }
+    Color getColor () { return color; }
 
     Rectangle getRect()  
     {
@@ -362,6 +411,12 @@ class Enemy : public Entity
         if (_height > 0.0f) height = _height;
         else height = 1.0f;
     }
+    void setDamage (int _damage) 
+    {
+        if (_damage >= 0) damage = _damage;
+        else damage = 0;
+    }
+    void setColor (Color _color) { color = _color; }
 
 };
 
@@ -391,14 +446,189 @@ class Cursor
 
     void Draw () 
     {
-        DrawRectangle(position.x - size / 2, position.y - thickness / 2, size, thickness, BLACK);
-        DrawRectangle(position.x - thickness / 2, position.y - size / 2, thickness, size, BLACK);
+        DrawRectangle(position.x - size / 2, position.y - thickness / 2, size, thickness, DARKBLUE);
+        DrawRectangle(position.x - thickness / 2, position.y - size / 2, thickness, size, DARKBLUE);
     }
 
     Vector2 getPosition () { return position; }
 
     float getAngleDeg () { return angleDeg; }
 
+};
+
+class GameProcess 
+{
+  private:
+
+    int diffLvl;
+    float spawnTimer;
+    float spawnInterval = 3.0f;
+    int qualityEnemy;
+    int score;
+    int oldScore;
+    bool isUpgradeStage1 = false;
+    bool isUpgradeStage2 = false;
+    std::vector<Enemy> enemies;
+
+    float defaultSpeedEnemy = 3.0f;
+    int defaultEnemyHealth = 1;
+    float defaultWidth = 15;
+    float defaultHeight = 15;
+    Color defaultEnemyColor = RED; 
+
+    bool gameOver = false;
+    bool pauseGame = false;
+
+  public:
+
+    GameProcess (int diffLvl, float spawnTimer, float spawnInterval, int qualityEnemy, int sizeVecEnemy) 
+    : diffLvl(diffLvl), spawnTimer(spawnTimer), spawnInterval(spawnInterval), qualityEnemy(qualityEnemy) 
+    {
+        enemies.reserve(sizeVecEnemy);
+        oldScore = 0;
+        score = 0;
+    }
+
+    GameProcess () : diffLvl(1), spawnTimer(0), spawnInterval(3.0f), qualityEnemy(5) 
+    {
+        enemies.reserve(500);
+        oldScore= 0;
+        score = 0;
+    }
+
+    void Update (std::unique_ptr<Player>& player) 
+    {
+        if (player->getHealth() <= 0) gameOver = true;
+
+        if (!gameOver)
+        {
+            spawnTimer += GetFrameTime();
+            if (spawnTimer >= spawnInterval) 
+            {
+                for (int i = 0; i < qualityEnemy; i++) 
+                {
+                    Enemy enem;
+                    enem.setHealth(defaultEnemyHealth);
+                    enem.setColor(defaultEnemyColor);
+                    enem.setSpeed(defaultSpeedEnemy);
+                    enem.setHeight(defaultHeight);
+                    enem.setWidth(defaultWidth);
+                    enemies.push_back(enem);
+                }
+                spawnTimer = 0.0f;
+            }
+
+            if (score >= oldScore + 50) 
+            {
+                oldScore = score;
+
+                spawnInterval = spawnInterval * 0.9f;
+                if (spawnInterval < 0.3f) spawnInterval = 0.3f;
+
+                qualityEnemy = (int)(qualityEnemy * 1.15f); 
+
+                defaultSpeedEnemy = defaultSpeedEnemy * 1.10f;
+                if (defaultSpeedEnemy > player->getSpeed()) defaultSpeedEnemy = player->getSpeed();
+
+                if (score >= 150) diffLvl = 2;
+
+                if (score >= 250) diffLvl = 3;
+            }
+
+            if (diffLvl == 2 && !isUpgradeStage1) 
+            {
+                isUpgradeStage1 = true;
+
+                defaultEnemyColor = DARKGREEN;
+                defaultEnemyHealth = 2;
+
+                player->SetShootCooldown(0.15f);
+            }
+
+            if (diffLvl == 3 && !isUpgradeStage2) 
+            {
+                isUpgradeStage2 = true;
+
+                defaultEnemyColor = VIOLET;
+                defaultEnemyHealth = 2;
+                defaultHeight = 20;
+                defaultWidth = 20;
+
+                player->setSpeed(5.5f);
+                player->SetShootCooldown(0.11f);
+            }
+        }
+        
+    }
+
+    void Draw (int playerHealth) 
+    {
+        ClearBackground(LIGHTGRAY);
+        DrawText(TextFormat("FPS: %i", GetFPS()), 10, 10, 24, BLACK);
+        DrawText(TextFormat("Health: %i", playerHealth), 10, 40, 32, BLACK);
+        DrawText(TextFormat("Score: %i", score), 10, 70, 32, BLACK);
+
+        if (pauseGame) 
+        {
+            DrawText("PAUSE", GetScreenWidth()/4 + 220, GetScreenHeight()/2 - 90, 48, BLACK);
+        }
+
+        if (gameOver) 
+        {
+            DrawText("GAME OVER", GetScreenWidth()/4 + 150, GetScreenHeight()/2 - 90, 48, BLACK);
+            DrawText("Press ENTER to restart..", GetScreenWidth()/4 + 90, GetScreenHeight()/2, 32, BLACK);
+            DrawText(TextFormat("Score: %i", score), GetScreenWidth()/4 + 220, GetScreenHeight()/2 + 45, 32, BLACK);
+        }
+
+    }
+
+    void Reset (std::unique_ptr<Player>& player) 
+    {
+        defaultEnemyColor = RED;
+        defaultEnemyHealth = 1;
+        defaultSpeedEnemy = 3.0f;
+        isUpgradeStage1 = false;
+        isUpgradeStage2 = false;
+
+        score = 0;
+        oldScore = 0;
+        qualityEnemy = 5;
+        spawnInterval = 3.0f;
+        diffLvl = 1;
+
+        enemies.clear();
+        player->GetBullets().clear();
+        player->GetBullets().resize(1000);
+        player->setX(GetScreenWidth()/2);
+        player->setY(GetScreenHeight()/2);
+        player->setHealth(3);
+        player->SetShootCooldown(0.3f);
+        player->SetIsAlive(true);
+        player->SetInvulmDuration(3.0f);
+        player->SetInvulmTimer(0.0f);
+        player->setSpeed(5);
+
+        gameOver = false;
+    }
+
+    void Pause () 
+    {
+        if (pauseGame) pauseGame = false;
+        else pauseGame = true;
+    }
+
+    std::vector<Enemy>& GetEnemies () { return enemies; }
+    int GetScore () { return score; }
+    bool GetGameOver () { return gameOver; }
+    bool GetPauseGame () { return pauseGame; }
+    
+    void SetScore (int _score) 
+    {
+        if (_score >= 0) score = _score;
+        else score = 0; 
+    }
+    void SetGameOver (bool _gameOver) { gameOver = _gameOver; }
+    void setPauseGame (bool _pause) { pauseGame = _pause; }
 };
 
 class CollisionManager 
@@ -463,16 +693,25 @@ class CollisionManager
         }
     }
 
-    void CheckcollisionBulletAndEnemy (Bullet &bul, Enemy &enem) 
+    void CheckcollisionBulletAndEnemy (Bullet &bul, Enemy &enem, std::unique_ptr<GameProcess> &process) 
     {
         if (CheckCollisionRecs(bul.getRect(), enem.getRect())) 
         {
-            bul.setActive(false);
             int newHealth = enem.getHealth() - bul.getDamage();
+
+            if (newHealth <= 0) 
+            {
+                newHealth = 0;
+                enem.setAlive(false);
+                
+                int newScore = process->GetScore() + 1;
+                process->SetScore(newScore);
+            }
             enem.setHealth(newHealth);
+            bul.setActive(false);
         }
     }
-    void CheckCollisionAllBullet (std::vector<Bullet> &bullets, std::vector<Enemy> &enemies) 
+    void CheckCollisionAllBullet (std::vector<Bullet> &bullets, std::vector<Enemy> &enemies, std::unique_ptr<GameProcess> &process) 
     {
         for (int i = 0; i < bullets.size(); i++) 
         {
@@ -482,14 +721,43 @@ class CollisionManager
             {
                 if (enemies[j].getIsAlive()) 
                 {
-                    CheckcollisionBulletAndEnemy(bullets[i], enemies[j]);
+                    CheckcollisionBulletAndEnemy(bullets[i], enemies[j], process);
 
                     if (!bullets[i].getIsActive()) break;
                 }
             }
         }
     }
+
+    void CheckCollisionPlayerAndEnemy (std::unique_ptr<Player> &player, Enemy &enem) 
+    {
+        if (player->GetInvulmTimer() > 0.0f) return;
+
+        if (CheckCollisionCircleRec(player->GetVector2(), player->GetRadius(), enem.getRect())) 
+        {
+            int newHealth = player->getHealth() - enem.getDamage();
+
+            if (newHealth <= 0) 
+            {
+                newHealth = 0;
+                player->SetIsAlive(false);
+            }
+            player->setHealth(newHealth);
+
+            player->TriggerInvulnerability();
+        }
+    }
+    void CheckCollisionPlayerAndAllEnemy (std::unique_ptr<Player> &player, std::vector<Enemy> &enemies) 
+    {
+        for (int i = 0; i < enemies.size(); i++) 
+        {
+            if (!enemies[i].getIsAlive()) continue;
+
+            CheckCollisionPlayerAndEnemy(player, enemies[i]);
+        }
+    }
 };
+
 
 int main () 
 {
@@ -503,50 +771,57 @@ int main ()
 
     //Initialization
  
-    std::vector<Enemy> enemies;
-    enemies.resize(100);
-
-    for (int i = 0; i < 100; i++) 
-    {
-        Enemy enem;
-        enem.setAlive(true);
-        enemies.push_back(enem);
-    }
-
     std::unique_ptr<Player> player = std::make_unique<Player>();
     std::unique_ptr<Cursor> cursor = std::make_unique<Cursor>();
     std::unique_ptr<CollisionManager> collission = std::make_unique<CollisionManager>();
+    std::unique_ptr<GameProcess> process = std::make_unique<GameProcess>();
 
     while(WindowShouldClose() == false) 
     {
-        // Updating
-        
+        // Updating            
+
         cursor->Update(player->getX(), player->getY());
-        
-        for(int i = 0; i < enemies.size(); i++) 
+
+        if (IsKeyPressed(KEY_P)) 
         {
-            enemies[i].Update(player->getX(), player->getY());
+            process->Pause();
         }
 
-        player->Update(cursor->getAngleDeg());
+        if (!process->GetPauseGame())
+        {
+            if (!process->GetGameOver()) 
+            {
+                for(int i = 0; i < process->GetEnemies().size(); i++) 
+                {
+                    process->GetEnemies()[i].Update(player->getX(), player->getY());
+                }
 
-        // Checking collision
+                player->Update(cursor->getAngleDeg());
+                process->Update(player);
 
-        collission->CheckCollissionAllEnemy(enemies);
+                // Checking collision
+
+                collission->CheckCollissionAllEnemy(process->GetEnemies());
+                collission->CheckCollisionAllBullet(player->GetBullets(), process->GetEnemies(), process);
+                collission->CheckCollisionPlayerAndAllEnemy(player, process->GetEnemies());
+            }
+            else 
+            {
+                if (IsKeyPressed(KEY_ENTER)) process->Reset(player);
+            }
+        }
 
         // Drawing
 
         BeginDrawing();
 
-        ClearBackground(LIGHTGRAY);
-        DrawText(TextFormat("FPS: %i", GetFPS()), 10, 10, 24, BLACK);
         player->Draw();
-
-        for(int i = 0; i < enemies.size(); i++) 
+        for(int i = 0; i < process->GetEnemies().size(); i++) 
         {
-            enemies[i].Draw();
+            process->GetEnemies()[i].Draw();
         }
         cursor->Draw();
+        process->Draw(player->getHealth());
         
         EndDrawing();
     }
