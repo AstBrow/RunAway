@@ -631,8 +631,144 @@ class GameProcess
     void setPauseGame (bool _pause) { pauseGame = _pause; }
 };
 
-class CollisionManager 
+class Bonus : public Object
 {
+  private:
+    bool isActive;
+    bool wasTake;
+    float radius;
+    
+  public:
+
+    virtual ~Bonus() = default;
+
+    void  Update () {}
+    void virtual Draw () = 0;
+
+    bool getActive () { return isActive; }
+    bool getWasTake () { return wasTake; }
+    Vector2 GetVector2 () { return Vector2{getX(), getY()}; }
+    float getRadius () { return radius; }
+
+    void setWasTake (bool _wasTake) { wasTake = _wasTake; }
+    void setRadius (float _radius) 
+    {
+        if (_radius > 0.0f) 
+        {
+            radius = _radius;
+        }
+        else radius = 1.0f;
+    }
+    void setActive (bool _isActive) { isActive = _isActive; }
+};
+
+class SpeedBonus : public Bonus 
+{
+  private:
+    float bonusSpeed = 5.0f;
+    float durationBonus = 8.0f;
+    float durationLife = 5.0f;
+    int oldScore;
+
+    float oldPlayerSpeed;
+    float currentPlayerSpeed;
+
+    bool lockUpdateSpeed = false;
+    bool lockRandomCoord = false;
+
+  public:
+    
+    SpeedBonus () 
+    { 
+        setRadius(8.0f); 
+        setActive(false);
+    }
+
+    void Update (int score, std::unique_ptr<Player>& player) 
+    {
+        if (score >= oldScore + 50) 
+        {
+            oldScore = score;
+
+            int chance = 1 + rand() % 100;
+            if (chance >= 1 && chance <= 100) 
+            {
+                setActive(true);
+            }
+        }
+
+        if (getActive()) 
+        {
+            if (!getWasTake())
+            {
+                durationLife -= GetFrameTime();
+                if (durationLife <= 0.0f) 
+                {
+                    setActive(false);
+                    durationLife = 5.0f;
+                }
+
+                if (!lockRandomCoord) 
+                {
+                    lockRandomCoord = true;
+
+                    float newX, newY;
+                    newX = 0 + rand() % 1200;
+                    newY = 0 + rand() % 800;
+
+                    setX(newX);
+                    setY(newY);
+                }
+            }
+            else 
+            {
+
+                if (!lockUpdateSpeed) 
+                {
+                    oldPlayerSpeed = player->getSpeed();
+                    currentPlayerSpeed = player->getSpeed() + bonusSpeed;
+                    lockUpdateSpeed = true;
+                }
+
+                durationBonus -= GetFrameTime();
+                if (durationBonus <= 0.0f) 
+                {
+                    setActive(false);
+                    setWasTake(false);
+                    player->setSpeed(oldPlayerSpeed);
+                    lockUpdateSpeed = false;
+                    lockRandomCoord = false;
+                    durationBonus = 8.0f;
+                }
+                else 
+                {
+                    player->setSpeed(currentPlayerSpeed);
+                }
+            }
+        }
+    }
+
+    void Draw () 
+    {
+        if (getActive()) 
+        {
+            if (!getWasTake())
+            {
+                if (durationLife <= 2.0f && (int)(GetTime() * 10) % 2 == 0) return; 
+                DrawCircle(getX(), getY(), getRadius(), YELLOW);
+            }
+
+            if (getWasTake()) 
+            {
+                DrawRectangle(1100, 750, 100, 50, BLACK);
+            }
+        }
+    }
+
+};
+
+class CollisionManager 
+{ 
   public:
 
     void CheckCollisisonTwoEnemy (Enemy &enem1, Enemy &enem2) 
@@ -756,8 +892,15 @@ class CollisionManager
             CheckCollisionPlayerAndEnemy(player, enemies[i]);
         }
     }
-};
 
+    void CheckCollisionPlayerAndBonus (std::unique_ptr<Player> &player, const std::shared_ptr<SpeedBonus> &bonus)
+    {
+        if (CheckCollisionCircles(player->GetVector2(), player->GetRadius(), bonus->GetVector2(), bonus->getRadius())) 
+        {
+            bonus->setWasTake(true);
+        }
+    }
+};
 
 int main () 
 {
@@ -770,11 +913,13 @@ int main ()
     SetTargetFPS(60);
 
     //Initialization
- 
-    std::unique_ptr<Player> player = std::make_unique<Player>();
-    std::unique_ptr<Cursor> cursor = std::make_unique<Cursor>();
     std::unique_ptr<CollisionManager> collission = std::make_unique<CollisionManager>();
+
     std::unique_ptr<GameProcess> process = std::make_unique<GameProcess>();
+    std::unique_ptr<Player> player = std::make_unique<Player>();
+    std::shared_ptr<SpeedBonus> speedBonus = std::make_shared<SpeedBonus>();
+    std::unique_ptr<Cursor> cursor = std::make_unique<Cursor>();
+
 
     while(WindowShouldClose() == false) 
     {
@@ -798,12 +943,14 @@ int main ()
 
                 player->Update(cursor->getAngleDeg());
                 process->Update(player);
+                speedBonus->Update(process->GetScore(), player);
 
                 // Checking collision
 
                 collission->CheckCollissionAllEnemy(process->GetEnemies());
                 collission->CheckCollisionAllBullet(player->GetBullets(), process->GetEnemies(), process);
                 collission->CheckCollisionPlayerAndAllEnemy(player, process->GetEnemies());
+                collission->CheckCollisionPlayerAndBonus(player, speedBonus);
             }
             else 
             {
@@ -822,7 +969,9 @@ int main ()
         }
         cursor->Draw();
         process->Draw(player->getHealth());
+        speedBonus->Draw();
         
         EndDrawing();
     }
+
 }
